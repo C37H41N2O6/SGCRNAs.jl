@@ -414,50 +414,93 @@ module SGCRNAs
         - df2::DataFrame: dataframe of Phenomenon
         - clust::Vector{Int64}: cluster number of each gene (one of return value of SpectralClustering())
         - fn::String: fig save name
-        - cor_mode::Symbol: mode of caluclation of correlation coefficient
-          - :ALL -> All three types are drawn (default)
-          - :A_AVG -> all gene average
-          - :P_AVG -> positive correlation gene average
-          - :N_AVG -> negative correlation gene average
+        - method::Symbol: method of caluclation of correlation coefficient
+          - :pearson (default)
+          - :spearman
+        - padj_method::Symbol: method of p-value adjustment
+          - :BH -> Benjamini-Hochberg method is used. (default)
+          - :BY -> Benjamini-Yekutieli method is used.
+        - thres_adjp::Float64: threshold of adjusted p-value for statistical significance; Default: 0.05
         """
-        function CorPhenMod(df1::DataFrame, df2::DataFrame, clust::Vector{Int64}, fn::String; cor_mode::Symbol=:ALL)
+        function CorPhenMod(df1::DataFrame, df2::DataFrame, clust::Vector{Int64}, fn::String; method::Symbol=:pearson, padj_method::Symbol=:BH, thres_adjp::Float64=0.05)
             kuni =  sort(unique(clust))
             knum = length(kuni)
 
-            CorList = []
-            for i in 1:ncol(df2)
-                push!(CorList, [[] for i=1:knum])
-            end
+            # 相関とp値計算
+            CorList = [[Float64[] for _ in 1:knum] for _ in 1:ncol(df2)]
+            PvalList = [[Float64[] for _ in 1:knum] for _ in 1:ncol(df2)]
             for k in 1:knum
+                buf = df1[clust .== kuni[k], :]
                 for i in 1:ncol(df2)
-                    buf = df1[clust .== kuni[k], :]
-		            Result_each = zeros(nrow(buf))
+                    y = df2[:,i]
+		            r_each = zeros(nrow(buf))
+                    p_each = zeros(nrow(buf))
                     for j in 1:nrow(buf)
-                        Result_each[j] = cor(Array(buf[j,:]), df2[:,i])
+                        x = Array(buf[j,:])
+                        if method == :spearman
+                            xr = StatsBase.tiedrank(x); yr = StatsBase.tiedrank(y)
+                            r_each[j] = cor(xr, yr)
+                            p_each[j] = pvalue(CorrelationTest(xr, yr))
+                        else
+                            r_each[j] = cor(x, y)
+                            p_each[j] = pvalue(CorrelationTest(x, y))
+                        end
                     end
-		            CorList[i][k] = Result_each
+		            CorList[i][k] = r_each
+                    PvalList[i][k] = p_each
                 end
             end
 
+            # Stouffer法でp値統合
+            norm = Normal()
+            combP = zeros(knum, ncol(df2))
+            combZ = zeros(knum, ncol(df2))
+            for (kk, k) in enumerate(1:knum)
+                for i in 1:ncol(df2)
+                    rvec = CorList[i][k]
+                    pvec = PvalList[i][k]
+                    z = similar(pvec)
+                    @inbounds for j in eachindex(pvec)
+                        pj = clamp(pvec[j], 1e-16, 1.0-1e-16)
+                        z[j] = quantile(norm, 1 - pj/2) * sign(rvec[j])
+                    end
+                    combZ[kk, i] = sum(z) / sqrt(length(z))
+                    combP[kk, i] = 2*(1 - cdf(norm, abs(combZ[kk, i])))
+                end
+            end
+            # 統合pの多重比較補正
+            all_comb_p = vec(combP)
+            mt = padj_method == :BH ? BenjaminiHochberg() :
+                    padj_method == :BY ? BenjaminiYekutieli() :
+                    error("Please specify either :BH or :BY for padj_method.")
+            adjp = adjust(PValues(all_comb_p), mt)
+            combAdjP = reshape(collect(adjp), size(combP))
+
+            # 描画
             x = collect(1:ncol(df2))
             y = collect(knum:-1:1)
-
-            f = Figure(size=(ncol(df2)*400+200, knum*40+50))
+            f = Figure(size=(ncol(df2)*1000+500, knum*60+50), fontsize=40, figure_padding=(30,50,30,10))
             ax = []
             for i in 1:length(CorList)
-                push!(ax, Axis(f[1, i], xgridvisible=false, ygridvisible=false, xticksvisible=false, yticksvisible=false, xticks=collect(-1.0:0.5:1.0), limits=((-1,1), nothing)))
+                push!(ax, Axis(f[1, i], xgridvisible=false, ygridvisible=false, xticksvisible=false, yticksvisible=false, xticks=collect(-1.0:0.5:1.0), limits=(-1,1,1,nothing)))
                 if (i==1)
-                    ax[1].yticks = (y,"module ".*string.(kuni))
+                    ax[1].yticks = (y,[mod(k, 5) == 0 ? "module "*string(k) : "" for k in kuni])
                 else
                     ax[i].yticklabelsvisible = false
                     linkyaxes!(ax[1], ax[i])
                 end
                 hidespines!(ax[i])
                 ax[i].title = names(df2)[i]
+                ax[i].titlesize = 80
                 for k in 1:length(CorList[1])
                     density!(ax[i], convert.(Float64,CorList[i][k]), offset=(knum-k+1), color=:x, colormap=(:bwr,0.4), colorrange=(-1.0,1.0), strokewidth=1, strokecolor=:black)
                 end
+                for k in 1:length(CorList[1])
+                    col = combAdjP[k,i] < thres_adjp ? (:red) : (:black)
+                    text!(ax[i], 1.0, knum-k+1.5, text=@sprintf("adjp=%.3g",combAdjP[k,i]), align=(:right, :center), color=col)
+                end
             end
+            colgap!(f.layout, 100)
             save(fn, f)
         end
         export CorPhenMod
