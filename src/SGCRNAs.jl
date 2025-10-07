@@ -1,9 +1,11 @@
 module SGCRNAs
     using Dates
+    using Printf
     using CSV, DataFrames
     using KrylovKit
     using StatsBase
     using LinearAlgebra, Statistics, MultivariateStats, Distributions, KernelDensity
+    using HypothesisTests, MultipleTesting
     using ParallelKMeans, Clustering
     using Random, UMAP
     using NetworkLayout, GraphPlot, Graphs, Colors
