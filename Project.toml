@@ -1,7 +1,7 @@
 name = "SGCRNAs"
 uuid = "4c411929-775e-4429-ac3f-feb95d997042"
 authors = ["Tatsunori Osone"]
-version = "1.0.0"
+version = "1.0.1"
 
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
