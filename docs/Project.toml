@@ -1,6 +1,3 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-SGCRNAs = "4c411929-775e-4429-ac3f-feb95d997042"
-
-[compat]
-Documenter = ">=1.10"
+SGCRNAs = "43ecb4dc-0e6d-45a3-b5f8-def5f870086c"
