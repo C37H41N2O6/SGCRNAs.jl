@@ -475,7 +475,7 @@ module SGCRNAs
             mt = padj_method == :BH ? BenjaminiHochberg() :
                     padj_method == :BY ? BenjaminiYekutieli() :
                     error("Please specify either :BH or :BY for padj_method.")
-            adjp = adjust(PValues(all_comb_p), mt)
+            adjp = MultipleTesting.adjust(PValues(all_comb_p), mt)
             combAdjP = reshape(collect(adjp), size(combP))
 
             # 描画
