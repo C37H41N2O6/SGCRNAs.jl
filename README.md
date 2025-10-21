@@ -17,7 +17,7 @@ using CSV, DataFrames
 using SGCRNAs
 
 # Load Data
-Data = CSV.read("Result/Norm/normalizedCounts_coding.tsv", header=1, comment="#", delim='\t', DataFrame);
+Data = CSV.read("test_data/normalizedCounts_coding.tsv", header=1, comment="#", delim='\t', DataFrame);
 
 # Pre-proccessing
 CorData, GradData = CGM(Data.Symbol, Matrix(Data[:,5:end]), mode=:FTEST);
