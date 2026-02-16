@@ -9,4 +9,5 @@ We recommend installing the following optional packages:
 - JLD2: Allows for the temporary saving of computational results.
 
 ## Related Publication
-If you use this package in your research, please cite the following paper: T. Osone, et al., SGCRNA: Spectral Clustering-Guided Co-Expression Network Analysis Without Scale-Free Constraints for Multi-Omic Data, bioRxiv, 2025. https://www.biorxiv.org/cgi/content/short/2025.04.27.650628v1
+If you use this package in your research, please cite the following paper: T. Osone, et al., "SGCRNA: spectral clustering-guided co-expression network analysis without scale-free constraints for multi-omic data", *Briefings in Bioinformatics*, 2026.
+https://doi.org/10.1093/bib/bbag021
