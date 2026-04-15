@@ -221,6 +221,9 @@ module SGCRNAs
         # arguments
         - cor::DataFrame: dataframe of correlation matrix (return value of CGM())
         - grad::DataFrame: dataframe of gradient matrix (return value of CGM())
+        - signFlg::Bool: handling of the sign of the correlation; default: true
+            - true -> (1 + cor) / 2
+            - false -> | cor |
         - tNodeNum::Int64: threshold of sub-cluster node number; default: 100
         - depthMaxv: Depth of sub-clusters; default: 5
         - pcas::Int64: pca dimention; default: 99
@@ -235,9 +238,10 @@ module SGCRNAs
         - pos: gene position for drawing network
         - edgeScore: edge score for drawing network
         """
-        function SpectralClustering(cor::DataFrame, grad::DataFrame; tNodeNum::Int64=100, depthMax::Int64=5, pcas::Int64=99, itr::Int64=300, seed::Int64=42, nNeighbors::Int64=40, minDist::Float64=0.1, normFlg::Bool=true, randNormFlg::Bool=false)
+        function SpectralClustering(cor::DataFrame, grad::DataFrame; signFlg::Bool=true, tNodeNum::Int64=100, depthMax::Int64=5, pcas::Int64=99, itr::Int64=300, seed::Int64=42, nNeighbors::Int64=40, minDist::Float64=0.1, normFlg::Bool=true, randNormFlg::Bool=false)
             rowNum = size(cor, 1)
-            df = ((1 .+ cor) ./ 2) .* exp.(-1 .* abs.(log.(abs.(grad))))
+            df = signFlg ? ((1 .+ cor) ./ 2) : abs.(cor)
+            df .*= exp.(-1 .* abs.(log.(abs.(grad))))
             # Laplacian matrix calculation
             emb, clust = Clustering_Main(df, itr, seed, pcas, normFlg, randNormFlg)
             clustData = [clust]
