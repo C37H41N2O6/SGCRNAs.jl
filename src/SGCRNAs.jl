@@ -142,7 +142,8 @@ module SGCRNAs
             replace!.(eachcol(GradData), NaN => 0.0)
                 
             # Genes that did not correlate with any of the genes were removed
-            CorData = CorData[sum.(eachrow(CorData[:,2:end])) .!= 0.0, :]
+            Q = [any(!=(0.0), row) for row in eachrow(Matrix(CorData[:, 2:end]))]
+            CorData = CorData[Q, :]
             GradData = innerjoin(CorData[:,[:Symbol]], GradData, on=:Symbol)
 
             # alignment
@@ -164,16 +165,24 @@ module SGCRNAs
 
     ##### Laplacian matrix calculation #####
         function LaplacianMatrix(mat::Matrix, normFlg::Bool, randNormFlg::Bool)
-            nodeScores = sum.(eachrow(mat))
-            matD = diagm(nodeScores)
-            matL = matD .- mat
+            d = vec(sum(mat, dims=2))
+            D = Diagonal(d)
+            L = D - mat
             if(normFlg)
-                matL = 1.0I(size(mat,2)) .- sqrt(inv(matD)) * matL * sqrt(inv(matD))
+                dinvhalf = zeros(float(eltype(mat)), length(d))
+                nz = d .> 0
+                dinvhalf[nz] .= 1.0 ./ sqrt.(float.(d[nz]))
+                S = Diagonal(dinvhalf)
+                return S * L * S
             elseif(randNormFlg)
-                matL = 1.0I(size(mat,2)) .- inv(matD) * matL
+                dinv = zeros(float(eltype(mat)), length(d))
+                nz = d .> 0
+                dinv[nz] .= 1.0 ./ float.(d[nz])
+                R = Diagonal(dinv)
+                return R * L
+            else
+                return L
             end
-
-            return matL
         end
     ##### Laplacian matrix calculation #####
 
@@ -183,14 +192,16 @@ module SGCRNAs
             eigVals = Real.(eigVals)
             eigVecs = Real.(reduce(hcat, eigVecs)')
 
-            # calculate normalized gap
-            normGaps = [(eigVals[k+1] - eigVals[k]) / eigVals[k] for k in 1:(length(eigVals)-1)]
-            sortedGaps = sortperm(normGaps, rev=true)
-            k = sortedGaps[1] == 1 ? sortedGaps[2] : sortedGaps[1]
+            gaps = diff(eigVals)
+            start_idx = ifelse.(abs(eigVals[1]) <= 1e-8, 2, 1)
+            k = argmax(@view gaps[start_idx:end]) + start_idx - 1
 
             embedding = eigVecs[1:k, :]
             if (normFlg)
-                buf = map(x -> x ./ sum(x .^ 2), eachrow(embedding))
+                buf = map(x -> begin
+                    nrm = sqrt(sum(x .^ 2))
+                    nrm > 0 ? x ./ nrm : x
+                end, eachrow(embedding))
                 embedding = reduce(hcat, buf)'
             end
             
@@ -225,7 +236,7 @@ module SGCRNAs
             - true -> (1 + cor) / 2
             - false -> | cor |
         - tNodeNum::Int64: threshold of sub-cluster node number; default: 100
-        - depthMaxv: Depth of sub-clusters; default: 5
+        - depthMax::Int64: Depth of sub-clusters; default: 5
         - pcas::Int64: pca dimention; default: 99
         - itr::Int64: number of trials; default: 300
         - seed::Int64: seed value of random number; default: 42 (Answer to the Ultimate Question of Life, the Universe, and Everything)
@@ -240,7 +251,7 @@ module SGCRNAs
         """
         function SpectralClustering(cor::DataFrame, grad::DataFrame; signFlg::Bool=true, tNodeNum::Int64=100, depthMax::Int64=5, pcas::Int64=99, itr::Int64=300, seed::Int64=42, nNeighbors::Int64=40, minDist::Float64=0.1, normFlg::Bool=true, randNormFlg::Bool=false)
             rowNum = size(cor, 1)
-            df = signFlg ? ((1 .+ cor) ./ 2) : abs.(cor)
+            df = signFlg ? ifelse.(cor .!= 0, (1 .+ cor) ./ 2, 0.0) : abs.(cor)
             df .*= exp.(-1 .* abs.(log.(abs.(grad))))
             # Laplacian matrix calculation
             emb, clust = Clustering_Main(df, itr, seed, pcas, normFlg, randNormFlg)
@@ -303,7 +314,7 @@ module SGCRNAs
                 end
                 cnctdf = deepcopy(Matrix(df[Q1, Q1]))
                 gene_list = names(df)[Q1]
-                Q2 = (map(sum, eachrow(cnctdf)) .!= 0.0)
+                Q2 = vec(any(abs.(cnctdf) .> 1e-12, dims=2))
                 cnctdf = cnctdf[Q2, Q2]
                 gene_list = gene_list[Q2]
                 gene_num = length(gene_list)
@@ -317,7 +328,7 @@ module SGCRNAs
                 ## Correlation coefficients between themselves are set to 0.
                 ## The overlapping combinations have a correlation coefficient of zero
                 ## due to the conversion to an upper triangular matrix.
-                cnctdf = cnctdf[cnctdf.cor .!= 0.0, :]
+                cnctdf = cnctdf[abs.(cnctdf.cor) .> 1e-12, :]
                 sort!(cnctdf, :e1)
             
                 # Assign node numbers to genes
